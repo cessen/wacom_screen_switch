@@ -43,6 +43,23 @@ def get_wacom_device_names():
     return devices
 
 
+def test_screen_names(screen_names):
+    """ Test whether xsetwacom accepts the given screen names for device switching.
+        Returns True if all the screen names work.  Returns false if any of them fail.
+    """
+    dev_names = get_wacom_device_names()
+    for sname in screen_names:
+        for dev in dev_names:
+            proc = subprocess.Popen(["xsetwacom", "--set", dev, "MapToOutput", sname], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out, err = proc.communicate()
+            proc.wait()
+            lines = str(out).split("\n") + str(err).split("\n")
+            for l in lines:
+                if "Unable to find an output" in l:
+                    return False
+    return True
+
+
 def get_screen_device_names():
     """ Returns a list of connected screen device names from xrandr.
     """
@@ -56,20 +73,30 @@ def get_screen_device_names():
         if "connected" in line and "disconnected" not in line:
             dev, tail = line.split(" ", 1)
             devices += [dev.strip()]
-    return devices
+
+    if test_screen_names(devices):
+        # The screen devices work, so use as-is.
+        return devices
+    else:
+        # The devices don't work, so it's probably nvidia.
+        # Substitute in "HEAD-0", "HEAD-1", etc.
+        nv_devices = []
+        for i in range(len(devices)):
+            nv_devices += ["HEAD-" + str(i)]
+        return nv_devices
 
 
 def cycle_screen(sig, stack):
     # Ignore further signals while working
     signal.signal(mysig, signal.SIG_IGN)
-    
+
     global screen_device_index
     screen_device_index = (screen_device_index + 1) % len(screen_device_names)
-    
+
     sdev = screen_device_names[screen_device_index]
     for dev in wacom_device_names:
         subprocess.Popen(["xsetwacom", "--set", dev, "MapToOutput", sdev]).wait()
-    
+
     # Watch for signals again
     signal.signal(mysig, cycle_screen)
 
@@ -84,8 +111,11 @@ def main_loop():
     global wacom_device_names
     global screen_device_index
 
+    # Get screen and wacom device names
     screen_device_names = get_screen_device_names()
     wacom_device_names = get_wacom_device_names()
+
+    # Set wacom devices to first screen
     screen_device_index = -1
     cycle_screen(None, None)
 
@@ -94,7 +124,7 @@ def main_loop():
     with open(pidfile, "w") as f:
         f.write(pid)
         f.flush()
-    
+
     # Set up exit signals
     signal.signal(signal.SIGHUP, cleanup_and_exit)
     signal.signal(signal.SIGQUIT, cleanup_and_exit)
@@ -104,7 +134,7 @@ def main_loop():
     # Sit and wait for signals
     while True:
         time.sleep(60) # Arbitrary number of seconds - will be interrupted by caught signal
-        
+
         # Check to make sure the pidfile still exists
         # and still represents this process.  This ensures
         # that this process doesn't keep running indefinitely
