@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """ A simple script that cycles your wacom device through the various screens
     in a multi-monitor setup.  It is meant to be hooked up to a hot key, for
@@ -33,7 +33,7 @@ def get_wacom_device_names():
     proc = subprocess.Popen(["xsetwacom", "--list", "devices"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = proc.communicate()
     proc.wait()
-    lines = out.split("\n")
+    lines = out.decode("utf-8").split("\n")
 
     devices = []
     for line in lines:
@@ -66,7 +66,7 @@ def get_screen_device_names():
     proc = subprocess.Popen("xrandr", stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = proc.communicate()
     proc.wait()
-    lines = str(out).split("\n")
+    lines = out.decode("utf-8").split("\n")
 
     devices = []
     for line in lines:
@@ -102,6 +102,7 @@ def cycle_screen(sig, stack):
 
 
 def cleanup_and_exit(sig, stack):
+    print("Cleaning up and exiting.")
     os.remove(pidfile)
     exit(0)
 
@@ -126,6 +127,7 @@ def main_loop():
         f.flush()
 
     # Set up exit signals
+    signal.signal(signal.SIGINT, cleanup_and_exit)
     signal.signal(signal.SIGHUP, cleanup_and_exit)
     signal.signal(signal.SIGQUIT, cleanup_and_exit)
     signal.signal(signal.SIGABRT, cleanup_and_exit)
@@ -157,7 +159,7 @@ if __name__ == "__main__":
             fpid = int(f.readline().strip())
         try:
             os.kill(fpid, mysig)
-            print "Already started!  Switch signal sent."
+            print("Already started!  Switch signal sent.")
         except OSError:
             # If it turns out the main process isn't actually running,
             # start this as the main process
